@@ -53,8 +53,11 @@ class TrackService:
         audio_file: UploadFile,
         cover_file: UploadFile,
     ) -> models.Track:
-        audio_obj_name = f"audio/{uuid.uuid4()}_{audio_file.filename}"
-        cover_obj_name = f"covers/{uuid.uuid4()}_{cover_file.filename}"
+        if audio_file.filename is None or cover_file.filename is None:
+            raise ValueError("Audio and cover files are required.")
+
+        audio_obj_name = f"audio/{uuid.uuid4()}_{audio_file.filename.replace(" ", "_").lower()}"
+        cover_obj_name = f"covers/{uuid.uuid4()}_{cover_file.filename.replace(" ", "_").lower()}"
 
         audio_data = await audio_file.read()
         cover_data = await cover_file.read()
