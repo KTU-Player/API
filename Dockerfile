@@ -27,8 +27,6 @@ COPY --from=builder /app/.venv .venv
 
 # Copy the application code
 COPY src/ ./src
-COPY alembic.ini .
-COPY alembic/ ./alembic
 
 # Set the PATH to include the virtual environment's binaries
 ENV PATH="/app/.venv/bin:$PATH"
