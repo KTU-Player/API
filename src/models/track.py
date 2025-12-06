@@ -12,7 +12,7 @@ class Genre(Base):
 
     genre_id: Mapped[int] = mapped_column(primary_key=True)
     genre_name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(sa.String(255))
+    description: Mapped[str | None] = mapped_column(sa.Text)
     era_of_origin: Mapped[str | None] = mapped_column(sa.String(255))
 
     tracks: Mapped[list["Track"]] = relationship(
@@ -27,7 +27,7 @@ class Track(Base):
     title: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     audio_url: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     cover_url: Mapped[str] = mapped_column(sa.String(255), nullable=False)
-    duration_miliseconds: Mapped[int] = mapped_column(nullable=False)
+    duration_milliseconds: Mapped[int] = mapped_column(nullable=False)
     release_date: Mapped[date] = mapped_column(sa.Date, nullable=False)
     is_explicit: Mapped[bool] = mapped_column(sa.Boolean, nullable=False)
     artist_id: Mapped[int] = mapped_column(sa.ForeignKey("artist.user_id"))

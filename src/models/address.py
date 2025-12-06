@@ -10,7 +10,7 @@ class Address(Base):
     __tablename__ = "address"
 
     address_id: Mapped[int] = mapped_column(primary_key=True)
-    postal_code: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    postal_code: Mapped[str] = mapped_column(sa.String(20), nullable=False)
     province: Mapped[str | None] = mapped_column(sa.String(255))
     city: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     street: Mapped[str] = mapped_column(sa.String(255), nullable=False)

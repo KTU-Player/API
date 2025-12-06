@@ -13,7 +13,7 @@ class UserActivityEvent(Base):
     __tablename__ = "user_activity_event"
 
     event_id: Mapped[int] = mapped_column(primary_key=True)
-    timestamp: Mapped[datetime] = mapped_column(
+    event_timestamp: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False
     )
     user_id: Mapped[int] = mapped_column(sa.ForeignKey("free_user.user_id"))
@@ -51,7 +51,7 @@ class StreamEvent(UserActivityEvent):
     event_id: Mapped[int] = mapped_column(
         sa.ForeignKey("user_activity_event.event_id"), primary_key=True
     )
-    duration_miliseconds: Mapped[int] = mapped_column(nullable=False)
+    duration_milliseconds: Mapped[int] = mapped_column(nullable=False)
     was_skipped: Mapped[bool] = mapped_column(nullable=False)
     track_id: Mapped[int] = mapped_column(sa.ForeignKey("track.track_id"))
 

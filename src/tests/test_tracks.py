@@ -37,7 +37,7 @@ async def test_artist(client: AsyncClient):
 async def test_create_track(client: AsyncClient, test_artist: dict):
     track_data = {
         "title": "My Awesome Track",
-        "duration_miliseconds": 180000,
+        "duration_milliseconds": 180000,
         "is_explicit": False,
         "release_date": "2023-10-27",
     }

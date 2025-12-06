@@ -18,8 +18,8 @@ class Country(Base):
     country_name: Mapped[str] = mapped_column(sa.String(255))
     iso_code_2: Mapped[str] = mapped_column(sa.String(2))
     iso_code_3: Mapped[str] = mapped_column(sa.String(3))
-    calling_code: Mapped[str] = mapped_column(sa.String(255))
-    currency_code: Mapped[str] = mapped_column(sa.String(255))
+    calling_code: Mapped[str] = mapped_column(sa.String(20))
+    currency_code: Mapped[str] = mapped_column(sa.String(3))
     continent_id: Mapped[int] = mapped_column(sa.ForeignKey("continent.continent_id"))
 
     continent: Mapped["Continent"] = relationship(back_populates="countries")

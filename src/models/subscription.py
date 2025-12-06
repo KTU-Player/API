@@ -13,7 +13,7 @@ class SubscriptionPlan(Base):
 
     subscription_plan_id: Mapped[int] = mapped_column(primary_key=True)
     plan_name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
-    description: Mapped[str | None] = mapped_column(sa.String(255))
+    description: Mapped[str | None] = mapped_column(sa.Text)
     price: Mapped[float] = mapped_column(DECIMAL(10, 2), nullable=False)
     currency: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     billing_interval: Mapped[str] = mapped_column(sa.String(255), nullable=False)
@@ -24,7 +24,7 @@ class SubscriptionStatus(Base):
 
     subscription_status_id: Mapped[int] = mapped_column(primary_key=True)
     subscription_status_name: Mapped[str] = mapped_column(
-        sa.String(255), nullable=False
+        sa.String(50), nullable=False
     )
 
 

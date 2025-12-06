@@ -15,7 +15,7 @@ class Genre(BaseModel):
 
 class TrackBase(BaseModel):
     title: str
-    duration_miliseconds: int
+    duration_milliseconds: int
     is_explicit: bool
     release_date: date
 

@@ -13,7 +13,7 @@ class TransactionStatus(Base):
     __tablename__ = "transaction_status"
 
     transaction_status_id: Mapped[int] = mapped_column(primary_key=True)
-    transaction_status_name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    transaction_status_name: Mapped[str] = mapped_column(sa.String(50), nullable=False)
 
 
 class PaymentMethod(Base):
@@ -22,7 +22,7 @@ class PaymentMethod(Base):
     payment_method_id: Mapped[int] = mapped_column(primary_key=True)
     payment_gateway_token: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     last_4_digits: Mapped[str] = mapped_column(sa.String(4), nullable=False)
-    card_brand: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    card_brand: Mapped[str] = mapped_column(sa.String(50), nullable=False)
     expiration_date: Mapped[str] = mapped_column(sa.String(5), nullable=False)
     owner_name: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     user_id: Mapped[int] = mapped_column(sa.ForeignKey("free_user.user_id"))
@@ -39,7 +39,7 @@ class Transaction(Base):
     __tablename__ = "transaction"
 
     transaction_id: Mapped[int] = mapped_column(primary_key=True)
-    timestamp: Mapped[datetime] = mapped_column(
+    transaction_timestamp: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False
     )
     amount: Mapped[float] = mapped_column(DECIMAL(10, 2), nullable=False)

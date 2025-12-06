@@ -21,6 +21,6 @@ class SearchEvent(UserActivityEvent):
 class StreamEvent(UserActivityEvent):
     model_config = ConfigDict(from_attributes=True)
 
-    duration_miliseconds: int
+    duration_milliseconds: int
     was_skipped: bool
     track: TrackInDB
