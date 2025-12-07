@@ -20,6 +20,22 @@ async def get_current_user(
     return user
 
 
+async def get_current_active_user(
+    db: AsyncSession = Depends(get_db_session),
+) -> BaseUser:
+    """
+    Placeholder dependency to get the current authenticated user (any type).
+    For demonstration, this is hardcoded to user_id=1.
+    In a real app, this would be derived from an auth token.
+    """
+    user = await get_current_user(user_id=1, db=db)
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user"
+        )
+    return user
+
+
 async def get_current_artist(db: AsyncSession = Depends(get_db_session)) -> Artist:
     """
     Returns the ORM object for user_id=3 (The Rockers).

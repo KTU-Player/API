@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import schemas
 from ..database import get_db_session
 from ..services.user_service import user_service
-from ..models import Country
+from ..models import Country, BaseUser
+from ..dependencies import get_current_active_user
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -63,3 +64,20 @@ async def read_user(user_id: int, db: AsyncSession = Depends(get_db_session)):
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
     return db_user
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_me(
+    current_user: BaseUser = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    Deactivate the current user's account (soft delete for GDPR compliance).
+    """
+    # The user is already fetched by the dependency.
+    # We can now mark them as inactive.
+    current_user.is_active = False
+    db.add(current_user)
+    await db.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
