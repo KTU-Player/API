@@ -26,7 +26,7 @@ from src.dependencies import (
 from src.models.location import Country
 from src.models.user import PremiumUser, Artist
 from src.models.track import Track
-from src.models.activity import StreamEvent, UserActivityEvent
+from src.models.activity import StreamEvent
 from src.models.queue import Queue, QueueItem
 from src.schemas.track_schema import TrackCreate, TrackUpdate, Track as TrackSchema
 from src.services.track_service import track_service
