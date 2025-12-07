@@ -20,11 +20,8 @@ class BaseUser(Base):
     date_of_birth: Mapped[date] = mapped_column(sa.Date, nullable=False)
     is_active: Mapped[bool] = mapped_column(sa.Boolean, nullable=False)
 
-    user_type: Mapped[str] = mapped_column(sa.String(50))
-
     __mapper_args__ = {
         "polymorphic_identity": "base_user",
-        "polymorphic_on": "user_type",
     }
 
 
@@ -37,6 +34,7 @@ class FreeUser(BaseUser):
 
     __mapper_args__ = {
         "polymorphic_identity": "free_user",
+        "polymorphic_load": "inline",
     }
 
 
@@ -49,6 +47,7 @@ class PremiumUser(FreeUser):
 
     __mapper_args__ = {
         "polymorphic_identity": "premium_user",
+        "polymorphic_load": "inline",
     }
 
 
@@ -66,4 +65,5 @@ class Artist(BaseUser):
 
     __mapper_args__ = {
         "polymorphic_identity": "artist",
+        "polymorphic_load": "inline",
     }

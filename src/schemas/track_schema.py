@@ -1,16 +1,14 @@
 from datetime import date
 from pydantic import BaseModel, ConfigDict
 
-from .user_schema import ArtistInDB
+from .user_schema import ArtistForTrack
 
 
-class Genre(BaseModel):
+class GenreForTrack(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     genre_id: int
     genre_name: str
-    description: str | None
-    era_of_origin: str | None
 
 
 class TrackBase(BaseModel):
@@ -31,5 +29,5 @@ class TrackInDB(TrackBase):
     track_id: int
     audio_url: str
     cover_url: str
-    artist: ArtistInDB
-    genres: list[Genre] = []
+    artist: ArtistForTrack
+    genres: list[GenreForTrack] = []

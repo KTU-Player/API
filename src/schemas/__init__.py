@@ -9,7 +9,7 @@ from .user_schema import (
     FreeUserInDB,
     PremiumUserInDB,
 )
-from .track_schema import TrackInDB, TrackCreate, Genre
+from .track_schema import TrackInDB, TrackCreate, GenreForTrack
 from .subscription_schema import Subscription, SubscriptionCreate, SubscriptionPlan
 from .payment_schema import PaymentMethod, PaymentMethodCreate, Transaction
 from .activity_schema import SearchEvent, StreamEvent
@@ -30,7 +30,7 @@ __all__ = [
     "PremiumUserInDB",
     "TrackInDB",
     "TrackCreate",
-    "Genre",
+    "GenreForTrack",
     "Subscription",
     "SubscriptionCreate",
     "SubscriptionPlan",

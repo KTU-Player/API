@@ -19,11 +19,9 @@ class UserActivityEvent(Base):
     user_id: Mapped[int] = mapped_column(sa.ForeignKey("free_user.user_id"))
 
     user: Mapped["FreeUser"] = relationship(back_populates="activity_events")
-    event_type: Mapped[str] = mapped_column(sa.String(50))
 
     __mapper_args__ = {
         "polymorphic_identity": "user_activity_event",
-        "polymorphic_on": "event_type",
     }
 
 
@@ -42,6 +40,7 @@ class SearchEvent(UserActivityEvent):
 
     __mapper_args__ = {
         "polymorphic_identity": "search_event",
+        "polymorphic_load": "inline",
     }
 
 
@@ -59,6 +58,7 @@ class StreamEvent(UserActivityEvent):
 
     __mapper_args__ = {
         "polymorphic_identity": "stream_event",
+        "polymorphic_load": "inline",
     }
 
 

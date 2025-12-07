@@ -1,5 +1,5 @@
 from datetime import date
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, SecretStr, ConfigDict
 
 from .location_schema import Country
 
@@ -8,10 +8,11 @@ from .location_schema import Country
 class BaseUserBase(BaseModel):
     email: EmailStr
     display_name: str
+    date_of_birth: date
 
 
 class BaseUserCreate(BaseUserBase):
-    password: str
+    password: SecretStr
 
 
 class BaseUserInDB(BaseUserBase):
@@ -21,11 +22,12 @@ class BaseUserInDB(BaseUserBase):
     is_active: bool
     creation_date: date
     last_login_date: date | None
+    date_of_birth: date
 
 
 # --- Free User Schemas ---
 class FreeUserBase(BaseModel):
-    date_of_birth: date
+    pass  # Fields are now in BaseUserBase
 
 
 class FreeUserCreate(BaseUserCreate, FreeUserBase):
@@ -63,7 +65,12 @@ class User(BaseUserInDB):
     model_config = ConfigDict(from_attributes=True)
 
     # These fields will be populated based on the user type
-    date_of_birth: date | None = None
     biography: str | None = None
     social_media_link: str | None = None
     country: Country | None = None
+
+
+class ArtistForTrack(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    user_id: int
+    display_name: str

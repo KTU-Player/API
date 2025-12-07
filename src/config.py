@@ -19,7 +19,8 @@ class Settings(BaseSettings):
     MINIO_ENDPOINT: str = f"{MINIO_HOST}:{MINIO_API_PORT}"
     MINIO_ROOT_USER: str = "minioadmin"
     MINIO_ROOT_PASSWORD: str = "minioadmin"
-    MINIO_BUCKET_NAME: str = "music-files"
+    MINIO_AUDIO_BUCKET: str = "audio"
+    MINIO_COVERS_BUCKET: str = "covers"
 
     @computed_field
     @property

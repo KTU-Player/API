@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .. import schemas
 from ..database import get_db_session
 from ..services.user_service import user_service
+from ..models import Country
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -41,7 +42,13 @@ async def create_artist(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered",
         )
-    # In a real app, you'd check if the country_id exists
+    # Verify that the country ID exists
+    country = await db.get(Country, artist_in.country_id)
+    if not country:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Country with id {artist_in.country_id} not found",
+        )
     return await user_service.create_artist(db=db, artist=artist_in)
 
 

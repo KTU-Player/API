@@ -1,15 +1,16 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class Continent(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     continent_id: int
     continent_name: str
 
-    class Config:
-        from_attributes = True
-
 
 class Country(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     country_id: int
     country_name: str
     iso_code_2: str
@@ -17,6 +18,3 @@ class Country(BaseModel):
     calling_code: str
     currency_code: str
     continent: Continent
-
-    class Config:
-        from_attributes = True
