@@ -13,6 +13,7 @@ from fastapi import (
     Request,
     Response,
 )
+from pydantic import BaseModel, HttpUrl
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import selectinload
 
@@ -32,6 +33,10 @@ from src.services.track_service import track_service
 from src.services.storage_service import storage_service
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
+
+
+class StreamUrlResponse(BaseModel):
+    url: HttpUrl
 
 
 @router.post("", response_model=TrackSchema, status_code=status.HTTP_201_CREATED)
@@ -166,7 +171,7 @@ async def delete_track(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/{track_id}/stream")
+@router.get("/{track_id}/stream-audio")
 async def stream_track(
     track_id: int,
     request: Request,
@@ -252,6 +257,40 @@ async def stream_track(
         headers=headers,
         media_type="audio/mpeg",
     )
+
+
+@router.get("/{track_id}/stream-url", response_model=StreamUrlResponse)
+async def get_track_stream_url(
+    track_id: int,
+    db: AsyncSession = Depends(get_db_session),
+    current_user: PremiumUser = Depends(get_current_premium_user),
+):
+    """
+    Generates a pre-signed URL for streaming a track's audio file.
+    """
+    result = await db.execute(
+        select(Track).filter(Track.track_id == track_id, Track.is_active.is_(True))
+    )
+    track = result.scalar_one_or_none()
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+
+    # Log stream event, consistent with the binary stream endpoint
+    stream_event = StreamEvent(
+        event_timestamp=datetime.now(timezone.utc),
+        user_id=current_user.user_id,
+        duration_milliseconds=0,  # Placeholder
+        was_skipped=False,  # Placeholder
+        track_id=track.track_id,
+    )
+    db.add(stream_event)
+    await db.commit()
+
+    url = storage_service.get_presigned_url(track.audio_key, storage_service.audio_bucket)
+    if not url:
+        raise HTTPException(status_code=500, detail="Could not generate stream URL.")
+
+    return StreamUrlResponse(url=HttpUrl(url))
 
 
 @router.post("/{seed_track_id}/recommendations", response_model=list[TrackSchema])
