@@ -26,7 +26,7 @@ from src.dependencies import (
 from src.models.location import Country
 from src.models.user import PremiumUser, Artist
 from src.models.track import Track
-from src.models.activity import StreamEvent
+from src.models.activity import StreamEvent, UserActivityEvent
 from src.models.queue import Queue, QueueItem
 from src.schemas.track_schema import TrackCreate, TrackUpdate, Track as TrackSchema
 from src.services.track_service import track_service
@@ -37,6 +37,11 @@ router = APIRouter(prefix="/tracks", tags=["tracks"])
 
 class StreamUrlResponse(BaseModel):
     url: HttpUrl
+
+
+class TrackPlayLog(BaseModel):
+    duration_milliseconds: int
+    was_skipped: bool
 
 
 @router.post("", response_model=TrackSchema, status_code=status.HTTP_201_CREATED)
@@ -76,6 +81,35 @@ async def create_track(
         .filter(Track.track_id == new_track.track_id)
     )
     return result.scalar_one()
+
+
+@router.post("/{track_id}/log-play", status_code=status.HTTP_204_NO_CONTENT)
+async def log_track_play(
+    track_id: int,
+    play_log: TrackPlayLog,
+    db: AsyncSession = Depends(get_db_session),
+    current_user: PremiumUser = Depends(get_current_premium_user),
+):
+    """
+    Logs a track play event (beacon).
+    """
+    result = await db.execute(select(Track).filter(Track.track_id == track_id))
+    track = result.scalar_one_or_none()
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+
+    # Create StreamEvent, letting SQLAlchemy handle the UserActivityEvent creation
+    stream_event = StreamEvent(
+        event_timestamp=datetime.now(timezone.utc),
+        user_id=current_user.user_id,
+        duration_milliseconds=play_log.duration_milliseconds,
+        was_skipped=play_log.was_skipped,
+        track_id=track_id,
+    )
+    db.add(stream_event)
+    await db.commit()
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("", response_model=list[TrackSchema])
@@ -192,17 +226,6 @@ async def stream_track(
     if not track:
         raise HTTPException(status_code=404, detail="Track not found")
 
-    # Log stream event
-    stream_event = StreamEvent(
-        event_timestamp=datetime.now(timezone.utc),
-        user_id=current_user.user_id,
-        duration_milliseconds=0,  # Placeholder, could be updated on client side
-        was_skipped=False,  # Placeholder
-        track_id=track.track_id,
-    )
-    db.add(stream_event)
-    await db.commit()
-
     bucket_name = storage_service.audio_bucket
     object_name = track.audio_key
 
@@ -275,18 +298,9 @@ async def get_track_stream_url(
     if not track:
         raise HTTPException(status_code=404, detail="Track not found")
 
-    # Log stream event, consistent with the binary stream endpoint
-    stream_event = StreamEvent(
-        event_timestamp=datetime.now(timezone.utc),
-        user_id=current_user.user_id,
-        duration_milliseconds=0,  # Placeholder
-        was_skipped=False,  # Placeholder
-        track_id=track.track_id,
+    url = storage_service.get_presigned_url(
+        track.audio_key, storage_service.audio_bucket
     )
-    db.add(stream_event)
-    await db.commit()
-
-    url = storage_service.get_presigned_url(track.audio_key, storage_service.audio_bucket)
     if not url:
         raise HTTPException(status_code=500, detail="Could not generate stream URL.")
 
