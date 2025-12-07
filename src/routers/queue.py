@@ -8,6 +8,7 @@ from src.dependencies import get_current_premium_user
 from src.models.user import PremiumUser
 from src.models.track import Track
 from src.models.user import Artist
+from src.models.location import Country
 from src.models.queue import Queue, QueueItem
 from src.schemas.queue_schema import Queue as QueueSchema
 
@@ -25,14 +26,16 @@ async def get_user_queue(
             selectinload(Queue.items)
             .selectinload(QueueItem.track)
             .selectinload(Track.artist)
-            .selectinload(Artist.country),
+            .selectinload(Artist.country)
+            .selectinload(Country.continent),
             selectinload(Queue.items)
             .selectinload(QueueItem.track)
             .selectinload(Track.genres),
         )
+        .filter(Queue.user_id == current_user.user_id, Track.is_active.is_(True))
         .filter(Queue.user_id == current_user.user_id)
     )
-    user_queue = result.scalar_one_or_none()
+    user_queue = result.unique().scalar_one_or_none()
     if not user_queue:
         # Per business logic, queues are created via recommendations,
         # but returning an empty queue for a user who hasn't generated any is fine.

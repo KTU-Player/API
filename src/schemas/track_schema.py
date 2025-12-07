@@ -1,6 +1,7 @@
 from datetime import date
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
+from src.services.storage_service import storage_service
 from .user_schema import ArtistForTrack
 
 
@@ -13,21 +14,42 @@ class GenreForTrack(BaseModel):
 
 class TrackBase(BaseModel):
     title: str
-    duration_milliseconds: int
     is_explicit: bool
-    release_date: date
 
 
 class TrackCreate(TrackBase):
-    # URLs will be set by the system after upload, not provided by the user
+    genre_ids: list[int] = []
     pass
 
 
-class TrackInDB(TrackBase):
+class TrackUpdate(TrackBase):
+    title: str | None = None
+    is_explicit: bool | None = None
+    genre_ids: list[int] | None = []
+
+
+class Track(TrackBase):
     model_config = ConfigDict(from_attributes=True)
 
     track_id: int
-    audio_url: str
-    cover_url: str
+    release_date: date
     artist: ArtistForTrack
     genres: list[GenreForTrack] = []
+    audio_key: str | None
+    cover_key: str | None
+
+    # @field_validator("audio_url", mode="before")
+    # def populate_audio_url(cls, v, values):
+    #     if "audio_key" in values.data:
+    #         return storage_service.get_presigned_url(
+    #             values.data["audio_key"], storage_service.audio_bucket
+    #         )
+    #     return v
+
+    # @field_validator("cover_url", mode="before")
+    # def populate_cover_url(cls, v, values):
+    #     if "cover_key" in values.data:
+    #         return storage_service.get_presigned_url(
+    #             values.data["cover_key"], storage_service.covers_bucket
+    #         )
+    #     return v

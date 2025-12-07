@@ -1,8 +1,9 @@
 import uuid
 from urllib.parse import urlparse
+from datetime import timedelta
 
 from fastapi import UploadFile
-from minio import Minio
+from minio import Minio, S3Error
 
 from src.config import settings
 
@@ -44,14 +45,19 @@ class StorageService:
             content_type=file.content_type,
         )
 
-        return f"http://{settings.MINIO_ENDPOINT}/{bucket}/{object_name}"
+        return object_name
 
-    def delete_file(self, file_url: str) -> bool:
+    def get_presigned_url(self, object_name: str, bucket_name: str) -> str:
         try:
-            parsed_url = urlparse(file_url)
-            bucket_name = parsed_url.path.split("/")[1]
-            object_name = parsed_url.path.split("/")[2]
+            return self.client.get_presigned_url(
+                "GET", bucket_name, object_name, expires=timedelta(hours=1)
+            )
+        except (S3Error, IndexError) as e:
+            print(f"Error generating presigned URL for {bucket_name}/{object_name}: {e}")
+            return object_name  # Fallback to original URL on error
 
+    def delete_file(self, object_name: str, bucket_name: str) -> bool:
+        try:
             self.client.remove_object(bucket_name, object_name)
             return True
         except Exception as e:

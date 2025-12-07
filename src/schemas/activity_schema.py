@@ -1,7 +1,7 @@
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
-from .track_schema import TrackInDB
+from .track_schema import Track
 
 
 class UserActivityEvent(BaseModel):
@@ -23,4 +23,4 @@ class StreamEvent(UserActivityEvent):
 
     duration_milliseconds: int
     was_skipped: bool
-    track: TrackInDB
+    track: Track

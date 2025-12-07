@@ -1,9 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from fastapi import UploadFile
-import uuid
-import io
+from fastapi import UploadFile, HTTPException, status
 
 from .. import models, schemas
 from .storage_service import storage_service
@@ -15,22 +13,19 @@ class TrackService:
     ) -> models.Track | None:
         stmt = (
             select(models.Track)
-            .where(models.Track.track_id == track_id)
+            .where(models.Track.track_id == track_id, models.Track.is_active.is_(True))
             .options(
                 selectinload(models.Track.artist), selectinload(models.Track.genres)
             )
         )
-        track = await db.scalar(stmt)
-        if track:
-            track.audio_url = storage_service.get_presigned_url(track.audio_url)
-            track.cover_url = storage_service.get_presigned_url(track.cover_url)
-        return track
+        return await db.scalar(stmt)
 
     async def get_all_tracks(
         self, db: AsyncSession, skip: int = 0, limit: int = 100
     ) -> list[models.Track]:
         stmt = (
             select(models.Track)
+            .where(models.Track.is_active.is_(True))
             .offset(skip)
             .limit(limit)
             .options(
@@ -38,11 +33,7 @@ class TrackService:
             )
         )
         result = await db.execute(stmt)
-        tracks = result.scalars().all()
-        for track in tracks:
-            track.audio_url = storage_service.get_presigned_url(track.audio_url)
-            track.cover_url = storage_service.get_presigned_url(track.cover_url)
-        return list(tracks)
+        return list(result.scalars().all())
 
     async def create_track(
         self,
@@ -56,31 +47,19 @@ class TrackService:
         if audio_file.filename is None or cover_file.filename is None:
             raise ValueError("Audio and cover files are required.")
 
-        audio_obj_name = f"audio/{uuid.uuid4()}_{audio_file.filename.replace(" ", "_").lower()}"
-        cover_obj_name = f"covers/{uuid.uuid4()}_{cover_file.filename.replace(" ", "_").lower()}"
-
-        audio_data = await audio_file.read()
-        cover_data = await cover_file.read()
-
-        if audio_file.content_type is not None and cover_file.content_type is not None:
-            storage_service.upload_file(
-                audio_obj_name,
-                io.BytesIO(audio_data),
-                len(audio_data),
-                audio_file.content_type,
-            )
-            storage_service.upload_file(
-                cover_obj_name,
-                io.BytesIO(cover_data),
-                len(cover_data),
-                cover_file.content_type,
-            )
+        audio_key = storage_service.upload_file(
+            audio_file, storage_service.audio_bucket
+        )
+        cover_key = storage_service.upload_file(
+            cover_file, storage_service.covers_bucket
+        )
 
         db_track = models.Track(
-            **track.model_dump(),
+            title=track.title,
+            is_explicit=track.is_explicit,
             artist_id=artist_id,
-            audio_url=audio_obj_name,
-            cover_url=cover_obj_name,
+            audio_key=audio_key,
+            cover_key=cover_key,
         )
 
         if genre_ids:
@@ -91,8 +70,60 @@ class TrackService:
 
         db.add(db_track)
         await db.commit()
-        await db.refresh(db_track)
         return db_track
+
+    async def update_track(
+        self,
+        db: AsyncSession,
+        track_id: int,
+        track_in: schemas.TrackUpdate,
+        current_artist_id: int,
+        cover_file: UploadFile | None,
+        genre_ids: list[int] | None = None,
+    ) -> models.Track | None:
+        result = await db.execute(
+            select(models.Track)
+            .options(selectinload(models.Track.genres))
+            .filter(
+                models.Track.track_id == track_id, models.Track.is_active.is_(True)
+            )
+        )
+        track = result.scalar_one_or_none()
+
+        if not track:
+            return None
+        if track.artist_id != current_artist_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to update this track",
+            )
+
+        for field, value in track_in.model_dump(exclude_unset=True).items():
+            setattr(track, field, value)
+
+        if genre_ids is not None:
+            genres = await db.execute(
+                select(models.Genre).where(models.Genre.genre_id.in_(genre_ids))
+            )
+            track.genres.clear()
+            track.genres.extend(genres.scalars().all())
+
+        if cover_file:
+            if not cover_file.content_type or not cover_file.content_type.startswith(
+                "image/"
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                    detail="Invalid cover file type. Only image files are allowed.",
+                )
+
+            storage_service.delete_file(track.cover_key, storage_service.covers_bucket)
+            track.cover_key = storage_service.upload_file(
+                cover_file, storage_service.covers_bucket
+            )
+
+        await db.commit()
+        return track
 
     async def get_genres(self, db: AsyncSession) -> list[models.Genre]:
         stmt = select(models.Genre)

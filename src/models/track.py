@@ -25,11 +25,11 @@ class Track(Base):
 
     track_id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(sa.String(255), nullable=False)
-    audio_url: Mapped[str] = mapped_column(sa.String(255), nullable=False)
-    cover_url: Mapped[str] = mapped_column(sa.String(255), nullable=False)
-    duration_milliseconds: Mapped[int] = mapped_column(nullable=False)
-    release_date: Mapped[date] = mapped_column(sa.Date, nullable=False)
+    audio_key: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    cover_key: Mapped[str] = mapped_column(sa.String(255), nullable=False)
+    release_date: Mapped[date] = mapped_column(sa.Date, nullable=False, default=date.today())
     is_explicit: Mapped[bool] = mapped_column(sa.Boolean, nullable=False)
+    is_active: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=True)
     artist_id: Mapped[int] = mapped_column(sa.ForeignKey("artist.user_id"))
 
     artist: Mapped["Artist"] = relationship(back_populates="tracks")

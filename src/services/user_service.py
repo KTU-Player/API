@@ -35,6 +35,10 @@ class UserService:
             is_active=True,  # Or based on email verification in a real app
         )
         db.add(db_user)
+        await db.flush()  # Flush to get the user_id for the new user
+
+        db_queue = models.Queue(user_id=db_user.user_id)
+        db.add(db_queue)
         await db.commit()
         await db.refresh(db_user)
         return db_user

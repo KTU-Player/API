@@ -1,6 +1,7 @@
-from fastapi import Depends, HTTPException, status, UploadFile
+from fastapi import Depends, HTTPException, status, UploadFile, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from typing import List
 
 from .database import get_db_session
 from .models.user import BaseUser, Artist, PremiumUser
@@ -75,3 +76,18 @@ async def empty_string_to_none(file: UploadFile | None = None) -> UploadFile | N
     if not file or not file.filename:
         return None
     return file
+
+
+async def get_genre_ids(genre_ids: str = Form(...)) -> List[int]:
+    """
+    Parses a comma-separated string of genre IDs from form data into a list of integers.
+    """
+    if not genre_ids:
+        return []
+    try:
+        return [int(gid.strip()) for gid in genre_ids.split(",")]
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Invalid genre_ids format. Expected a comma-separated list of integers.",
+        )

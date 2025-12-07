@@ -1,7 +1,6 @@
 from datetime import datetime, timezone
 from minio.error import S3Error
-from sqlalchemy import select, func, and_
-from sqlalchemy.orm import selectinload
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import (
     APIRouter,
@@ -9,52 +8,58 @@ from fastapi import (
     HTTPException,
     UploadFile,
     File,
+    Form,
     status,
     Request,
     Response,
 )
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import selectinload
 
 from src.database import get_db_session
 from src.dependencies import (
     get_current_artist,
     get_current_premium_user,
-    empty_string_to_none,
+    get_genre_ids,
 )
-from src.models.user import PremiumUser
-from src.models.track import Track
 from src.models.location import Country
-from src.models.user import Artist
+from src.models.user import PremiumUser, Artist
+from src.models.track import Track
 from src.models.activity import StreamEvent
 from src.models.queue import Queue, QueueItem
-from src.schemas.track_schema import TrackCreate, TrackInDB
+from src.schemas.track_schema import TrackCreate, TrackUpdate, Track as TrackSchema
+from src.services.track_service import track_service
 from src.services.storage_service import storage_service
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
 
 
-@router.post("", response_model=TrackInDB, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=TrackSchema, status_code=status.HTTP_201_CREATED)
 async def create_track(
     track_in: TrackCreate = Depends(),
+    genre_ids: list[int] = Depends(get_genre_ids),
     audio_file: UploadFile = File(...),
     cover_file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db_session),
     current_artist: Artist = Depends(get_current_artist),
 ):
-    audio_url = storage_service.upload_file(audio_file, storage_service.audio_bucket)
-    cover_url = storage_service.upload_file(cover_file, storage_service.covers_bucket)
-
-    new_track = Track(
-        **track_in.model_dump(),
-        audio_url=audio_url,
-        cover_url=cover_url,
-        artist_id=current_artist.user_id,
+    """
+    Creates a new track.
+    """
+    if not genre_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="At least one genre must be selected.",
+        )
+    new_track = await track_service.create_track(
+        db,
+        track_in,
+        current_artist.user_id,
+        genre_ids,
+        audio_file,
+        cover_file,
     )
-    db.add(new_track)
-    await db.commit()
 
-    # Eagerly load the relationships required by the response model
-    # to prevent lazy loading issues during serialization.
     result = await db.execute(
         select(Track)
         .options(
@@ -65,19 +70,64 @@ async def create_track(
         )
         .filter(Track.track_id == new_track.track_id)
     )
-    new_track = result.scalar_one()
-    return new_track
+    return result.scalar_one()
 
 
-@router.put("/{track_id}", response_model=TrackInDB)
+@router.get("", response_model=list[TrackSchema])
+async def get_all_tracks(
+    db: AsyncSession = Depends(get_db_session),
+    skip: int = 0,
+    limit: int = 100,
+):
+    """
+    Returns all tracks.
+    """
+    return await track_service.get_all_tracks(db, skip, limit)
+
+
+@router.get("/{track_id}", response_model=TrackSchema)
+async def get_track_by_id(
+    track_id: int,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    Returns a track by its ID.
+    """
+    track = await track_service.get_track_by_id(db, track_id)
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+    return track
+
+
+@router.put("/{track_id}", response_model=TrackSchema)
 async def update_track(
     track_id: int,
-    track_in: TrackCreate = Depends(),
-    audio_file: UploadFile | None = Depends(empty_string_to_none),
-    cover_file: UploadFile | None = Depends(empty_string_to_none),
+    track_in: TrackUpdate = Depends(),
+    genre_ids: str | None = Form(None),
+    cover_file: UploadFile | None = None,
     db: AsyncSession = Depends(get_db_session),
     current_artist: Artist = Depends(get_current_artist),
 ):
+    if genre_ids is not None:
+        try:
+            track_in.genre_ids = [int(gid.strip()) for gid in genre_ids.split(",")]
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Invalid genre_ids format. Expected a comma-separated list of integers.",
+            )
+
+    if track_in.genre_ids is not None and not track_in.genre_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="At least one genre must be selected.",
+        )
+    updated_track = await track_service.update_track(
+        db, track_id, track_in, current_artist.user_id, cover_file
+    )
+    if not updated_track:
+        raise HTTPException(status_code=404, detail="Track not found")
+
     result = await db.execute(
         select(Track)
         .options(
@@ -86,33 +136,9 @@ async def update_track(
             .selectinload(Country.continent),
             selectinload(Track.genres),
         )
-        .filter(Track.track_id == track_id)
+        .filter(Track.track_id == updated_track.track_id)
     )
-    track = result.scalar_one_or_none()
-    if not track:
-        raise HTTPException(status_code=404, detail="Track not found")
-    if track.artist_id != current_artist.user_id:
-        raise HTTPException(
-            status_code=403, detail="Not authorized to update this track"
-        )
-
-    for field, value in track_in.model_dump(exclude_unset=True).items():
-        setattr(track, field, value)
-
-    if audio_file:
-        storage_service.delete_file(track.audio_url)
-        track.audio_url = storage_service.upload_file(
-            audio_file, storage_service.audio_bucket
-        )
-    if cover_file:
-        storage_service.delete_file(track.cover_url)
-        track.cover_url = storage_service.upload_file(
-            cover_file, storage_service.covers_bucket
-        )
-
-    await db.commit()
-    await db.refresh(track)
-    return track
+    return result.scalar_one()
 
 
 @router.delete("/{track_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -131,10 +157,11 @@ async def delete_track(
             status_code=403, detail="Not authorized to delete this track"
         )
 
-    storage_service.delete_file(track.audio_url)
-    storage_service.delete_file(track.cover_url)
+    storage_service.delete_file(track.audio_key, storage_service.audio_bucket)
+    storage_service.delete_file(track.cover_key, storage_service.covers_bucket)
 
-    await db.delete(track)
+    track.is_active = False
+    db.add(track)
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -154,7 +181,7 @@ async def stream_track(
             .selectinload(Country.continent),
             selectinload(Track.genres),
         )
-        .filter(Track.track_id == track_id)
+        .filter(Track.track_id == track_id, Track.is_active.is_(True))
     )
     track = result.scalar_one_or_none()
     if not track:
@@ -172,7 +199,7 @@ async def stream_track(
     await db.commit()
 
     bucket_name = storage_service.audio_bucket
-    object_name = track.audio_url.split("/")[-1]
+    object_name = track.audio_key
 
     try:
         stat = storage_service.client.stat_object(bucket_name, object_name)
@@ -227,7 +254,7 @@ async def stream_track(
     )
 
 
-@router.post("/{seed_track_id}/recommendations", response_model=list[TrackInDB])
+@router.post("/{seed_track_id}/recommendations", response_model=list[TrackSchema])
 async def get_recommendations(
     seed_track_id: int,
     db: AsyncSession = Depends(get_db_session),
@@ -265,6 +292,7 @@ async def get_recommendations(
             and_(
                 Track.track_id != seed_track_id,
                 ~Track.track_id.in_(current_track_ids_in_queue),
+                Track.is_active.is_(True),
             )
         )
         .order_by(func.random())
