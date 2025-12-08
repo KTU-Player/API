@@ -16,10 +16,7 @@ from .services.user_service import user_service
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
 
-async def get_current_user(
-    token: Annotated[str, Depends(oauth2_scheme)],
-    db: AsyncSession = Depends(get_db_session),
-) -> BaseUser:
+async def get_token_data(token: Annotated[str, Depends(oauth2_scheme)]) -> TokenData:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -37,6 +34,18 @@ async def get_current_user(
         raise credentials_exception
     if token_data.user_id is None:
         raise credentials_exception
+    return token_data
+
+
+async def get_current_user(
+    token_data: Annotated[TokenData, Depends(get_token_data)],
+    db: AsyncSession = Depends(get_db_session),
+) -> BaseUser:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
     user = await user_service.get_user_by_id(db, user_id=token_data.user_id)
     if user is None:
         raise credentials_exception
@@ -44,13 +53,17 @@ async def get_current_user(
 
 
 async def get_current_artist(
-    current_user: Annotated[BaseUser, Depends(get_current_user)],
+    token_data: Annotated[TokenData, Depends(get_token_data)],
     db: AsyncSession = Depends(get_db_session),
 ) -> Artist:
     """
     Returns the ORM object for the current user if they are an artist.
     """
-    artist = await db.get(Artist, current_user.user_id)
+    if token_data.role != "artist":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="User is not an artist"
+        )
+    artist = await db.get(Artist, token_data.user_id)
     if not artist:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -60,13 +73,17 @@ async def get_current_artist(
 
 
 async def get_current_premium_user(
-    current_user: Annotated[BaseUser, Depends(get_current_user)],
+    token_data: Annotated[TokenData, Depends(get_token_data)],
     db: AsyncSession = Depends(get_db_session),
 ) -> PremiumUser:
     """
     Returns the ORM object for the current user if they are a premium user.
     """
-    premium_user = await db.get(PremiumUser, current_user.user_id)
+    if token_data.role != "premium":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="User is not a premium user"
+        )
+    premium_user = await db.get(PremiumUser, token_data.user_id)
     if not premium_user:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="User is not a premium user"
@@ -75,13 +92,17 @@ async def get_current_premium_user(
 
 
 async def get_current_free_user(
-    current_user: Annotated[BaseUser, Depends(get_current_user)],
+    token_data: Annotated[TokenData, Depends(get_token_data)],
     db: AsyncSession = Depends(get_db_session),
 ) -> FreeUser:
     """
     Returns the ORM object for the current user if they are a free user.
     """
-    free_user = await db.get(FreeUser, current_user.user_id)
+    if token_data.role != "free":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="User is not a free user"
+        )
+    free_user = await db.get(FreeUser, token_data.user_id)
     if not free_user:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="User is not a free user"
