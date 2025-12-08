@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
-from .routers import users, tracks, queue, search
+from .routers import users, tracks, queue, search, analytics
 from .services.storage_service import storage_service
 
 
@@ -26,6 +26,7 @@ app.include_router(users.router)
 app.include_router(tracks.router)
 app.include_router(queue.router)
 app.include_router(search.router)
+app.include_router(analytics.router)
 
 
 @app.get("/", tags=["Health"])
