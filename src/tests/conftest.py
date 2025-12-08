@@ -5,17 +5,17 @@ from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from unittest.mock import MagicMock
 
-from ..main import app
-from ..database import get_db_session
-from ..config import settings
-from ..models import Base
-from ..services.storage_service import (
-    storage_service as real_storage_service,
+from src.main import app
+from src.database import get_db_session
+from src.config import settings
+from src.models import Base
+from src.services.storage_service import (
+    storage_service,
     StorageService,
 )
 
 # Use a separate database for testing
-TEST_DATABASE_URL = str(settings.database_url) + "_test"
+TEST_DATABASE_URL = str(settings.database_url)
 
 engine = create_async_engine(TEST_DATABASE_URL, echo=False)
 TestingSessionLocal = async_sessionmaker(
@@ -53,15 +53,22 @@ def event_loop():
 
 
 @pytest.fixture(scope="session", autouse=True)
-async def setup_database():
+def setup_database(event_loop: asyncio.AbstractEventLoop):
     """
     Create and drop the test database tables for the test session.
     """
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+
+    async def setup():
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+    async def teardown():
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+
+    event_loop.run_until_complete(setup())
     yield
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    event_loop.run_until_complete(teardown())
 
 
 @pytest.fixture(scope="function")
@@ -69,7 +76,7 @@ async def client(mock_storage_service: MagicMock) -> AsyncGenerator[AsyncClient,
     """
     An async client for making requests to the app.
     """
-    from ..services import track_service
+    from src.services import track_service
 
     track_service.storage_service = mock_storage_service
     async with AsyncClient(
@@ -77,4 +84,4 @@ async def client(mock_storage_service: MagicMock) -> AsyncGenerator[AsyncClient,
     ) as c:
         yield c
     # restore original service
-    track_service.storage_service = real_storage_service
+    track_service.storage_service = storage_service

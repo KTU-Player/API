@@ -21,10 +21,11 @@ from src.database import get_db_session
 from src.dependencies import (
     get_current_artist,
     get_current_premium_user,
+    get_current_active_user,
     get_genre_ids,
 )
 from src.models.location import Country
-from src.models.user import PremiumUser, Artist
+from src.models.user import PremiumUser, Artist, BaseUser
 from src.models.track import Track
 from src.models.activity import StreamEvent
 from src.models.queue import Queue, QueueItem
@@ -42,6 +43,11 @@ class StreamUrlResponse(BaseModel):
 class TrackPlayLog(BaseModel):
     duration_milliseconds: int
     was_skipped: bool
+
+
+class TrackPreviewUrl(BaseModel):
+    url: HttpUrl
+    preview_duration_seconds: int
 
 
 @router.post("", response_model=TrackSchema, status_code=status.HTTP_201_CREATED)
@@ -110,6 +116,70 @@ async def log_track_play(
     await db.commit()
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/{track_id}/preview-audio")
+async def preview_track_audio(
+    track_id: int,
+    db: AsyncSession = Depends(get_db_session),
+    current_user: BaseUser = Depends(get_current_active_user),  # Any authenticated user
+):
+    """
+    Provides a secure audio preview (first 1MB) for a track.
+    """
+    track = await track_service.get_track_by_id(db, track_id)
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+
+    preview_limit_bytes = 1024 * 1024  # 1 MB
+    bucket_name = storage_service.audio_bucket
+    object_name = track.audio_key
+
+    try:
+        # Check if the object exists and get its size
+        stat = storage_service.client.stat_object(bucket_name, object_name)
+        file_size = stat.size
+    except S3Error as e:
+        raise HTTPException(status_code=404, detail=f"Audio file not found: {e}")
+
+    if file_size is None:
+        raise HTTPException(status_code=404, detail="Audio file not found")
+
+    # Determine the actual length to retrieve
+    length_to_retrieve = min(file_size, preview_limit_bytes)
+
+    def file_iterator(bucket, obj, length):
+        with storage_service.client.get_object(bucket, obj, length=length) as response:
+            yield from response
+
+    return StreamingResponse(
+        file_iterator(bucket_name, object_name, length_to_retrieve),
+        media_type="audio/mpeg",
+        headers={"Content-Length": str(length_to_retrieve)},
+    )
+
+
+@router.get("/{track_id}/preview-url", response_model=TrackPreviewUrl)
+async def get_track_preview_url(
+    track_id: int,
+    db: AsyncSession = Depends(get_db_session),
+    current_user: BaseUser = Depends(get_current_active_user),  # Any authenticated user
+):
+    """
+    Provides an insecure presigned URL for a track preview,
+    relying on the frontend to limit playback.
+    """
+    track = await track_service.get_track_by_id(db, track_id)
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+
+    url = storage_service.get_presigned_url(
+        track.audio_key, storage_service.audio_bucket
+    )
+    if not url:
+        raise HTTPException(status_code=500, detail="Could not generate preview URL.")
+
+    return TrackPreviewUrl(url=HttpUrl(url), preview_duration_seconds=30)
 
 
 @router.get("", response_model=list[TrackSchema])
