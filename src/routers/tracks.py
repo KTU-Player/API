@@ -41,6 +41,10 @@ class StreamUrlResponse(BaseModel):
     url: HttpUrl
 
 
+class CoverImageUrlResponse(BaseModel):
+    url: HttpUrl
+
+
 class TrackPlayLog(BaseModel):
     duration_milliseconds: int
     was_skipped: bool
@@ -197,6 +201,66 @@ async def get_track_preview_url(
         raise HTTPException(status_code=500, detail="Could not generate preview URL.")
 
     return TrackPreviewUrl(url=HttpUrl(url), preview_duration_seconds=30)
+
+
+@router.get("/{track_id}/cover-url", response_model=CoverImageUrlResponse)
+async def get_track_cover_url(
+    track_id: int,
+    db: AsyncSession = Depends(get_db_session),
+    current_user: BaseUser = Depends(get_current_user),  # Any authenticated user
+):
+    """
+    Generates a pre-signed URL for a track's cover image.
+    """
+    track = await track_service.get_track_by_id(db, track_id)
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+
+    url = storage_service.get_presigned_url(
+        track.cover_key, storage_service.covers_bucket
+    )
+    if not url:
+        raise HTTPException(status_code=500, detail="Could not generate cover URL.")
+
+    return CoverImageUrlResponse(url=HttpUrl(url))
+
+
+@router.get("/{track_id}/cover-image")
+async def get_track_cover_image(
+    track_id: int,
+    db: AsyncSession = Depends(get_db_session),
+    current_user: BaseUser = Depends(get_current_user),  # Any authenticated user
+):
+    """
+    Streams a track's cover image directly.
+    """
+    track = await track_service.get_track_by_id(db, track_id)
+    if not track:
+        raise HTTPException(status_code=404, detail="Track not found")
+
+    bucket_name = storage_service.covers_bucket
+    object_name = track.cover_key
+
+    try:
+        stat = storage_service.client.stat_object(bucket_name, object_name)
+        file_size = stat.size
+    except S3Error:
+        raise HTTPException(status_code=404, detail="Cover image file not found")
+
+    if file_size is None:
+        raise HTTPException(status_code=404, detail="Cover image file not found")
+
+    def file_iterator(bucket, obj):
+        with storage_service.client.get_object(bucket, obj) as response:
+            yield from response
+
+    # Assuming cover images are JPEGs. You might want to store the content type
+    # in your database alongside the track for more accuracy.
+    return StreamingResponse(
+        file_iterator(bucket_name, object_name),
+        media_type="image/jpeg",
+        headers={"Content-Length": str(file_size)},
+    )
 
 
 @router.get("/{track_id}", response_model=TrackSchema)
