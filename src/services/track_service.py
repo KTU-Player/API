@@ -61,7 +61,9 @@ class TrackService:
     ) -> list[models.Track]:
         stmt = (
             select(models.Track)
-            .where(models.Track.artist_id == artist_id, models.Track.is_active.is_(True))
+            .where(
+                models.Track.artist_id == artist_id, models.Track.is_active.is_(True)
+            )
             .offset(skip)
             .limit(limit)
             .options(
@@ -82,6 +84,22 @@ class TrackService:
     ) -> models.Track:
         if audio_file.filename is None or cover_file.filename is None:
             raise ValueError("Audio and cover files are required.")
+
+        if not audio_file.content_type or not audio_file.content_type.startswith(
+            "audio/"
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail="Invalid audio file type. Only audio files are allowed.",
+            )
+
+        if not cover_file.content_type or not cover_file.content_type.startswith(
+            "image/"
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail="Invalid cover file type. Only image files are allowed.",
+            )
 
         audio_key = storage_service.upload_file(
             audio_file, storage_service.audio_bucket

@@ -66,6 +66,7 @@ async def create_track(
     """
     Creates a new track.
     """
+
     if not genre_ids:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
