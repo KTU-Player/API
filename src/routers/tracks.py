@@ -321,6 +321,10 @@ async def delete_track(
 
     if not track:
         raise HTTPException(status_code=404, detail="Track not found")
+    # If track is already soft-deleted, the desired state is achieved.
+    if not track.is_active:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
     if track.artist_id != current_artist.user_id:
         raise HTTPException(
             status_code=403, detail="Not authorized to delete this track"
