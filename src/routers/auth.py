@@ -1,8 +1,10 @@
 from typing import Annotated
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from .. import models, schemas
 from ..database import get_db_session
@@ -76,19 +78,34 @@ async def login_for_access_token(
         A dictionary with the access token and token type.
     """
     user = await user_service.get_user_by_email(db, email=form_data.username)
-    if not user or not PasswordHasher.verify_password(
-        form_data.password, user.password_hash
+    if (
+        not user
+        or not user.is_active
+        or not PasswordHasher.verify_password(form_data.password, user.password_hash)
     ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Update last login timestamp
+    user.last_login_date = datetime.now(timezone.utc)
+    await db.commit()
+
     # Determine role
+    # The order of checks is important. An artist can also be a premium user,
+    # but 'artist' is a more specific role for content creation.
     role = "free"
-    if await db.get(models.Artist, user.user_id):
+    is_artist = await db.scalar(
+        select(models.Artist).where(models.Artist.user_id == user.user_id)
+    )
+    is_premium = await db.scalar(
+        select(models.PremiumUser).where(models.PremiumUser.user_id == user.user_id)
+    )
+    if is_artist:
         role = "artist"
-    elif await db.get(models.PremiumUser, user.user_id):
+    elif is_premium:
         role = "premium"
     access_token = create_access_token(data={"sub": str(user.user_id), "role": role})
     return {"access_token": access_token, "token_type": "bearer"}

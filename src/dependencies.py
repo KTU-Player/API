@@ -46,6 +46,8 @@ async def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    if token_data.user_id is None:
+        raise credentials_exception
     user = await user_service.get_user_by_id(db, user_id=token_data.user_id)
     if user is None:
         raise credentials_exception
@@ -98,7 +100,7 @@ async def get_current_free_user(
     """
     Returns the ORM object for the current user if they are a free user.
     """
-    if token_data.role != "free":
+    if token_data.role not in ["free", "premium"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="User is not a free user"
         )
