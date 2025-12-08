@@ -7,21 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import models, schemas
 from ..database import get_db_session
+from ..dependencies import get_current_free_user
 from ..services.payment_service import mock_bank_service
 
 router = APIRouter(prefix="/subscriptions", tags=["Subscriptions"])
-
-
-# Mock dependency to simulate a logged-in free user (Bob, user_id=2)
-async def get_current_free_user(
-    session: AsyncSession = Depends(get_db_session),
-) -> models.FreeUser:
-    user = await session.get(models.FreeUser, 2)
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
-    return user
 
 
 @router.post("/upgrade", status_code=status.HTTP_204_NO_CONTENT)

@@ -5,9 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.database import get_db_session
-from src.dependencies import get_current_active_user
+from src.dependencies import get_current_free_user
 from src.models.track import Track
-from src.models.user import BaseUser, Artist
+from src.models.user import FreeUser, Artist
 from src.models.activity import SearchEvent
 from src.schemas.track_schema import Track as TrackSchema
 from src.models.location import Country
@@ -21,7 +21,7 @@ async def search_tracks(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db_session),
-    current_user: BaseUser = Depends(get_current_active_user),
+    current_user: FreeUser = Depends(get_current_free_user),
 ):
     """
     Searches for tracks by title and logs the search query as a UserActivityEvent.

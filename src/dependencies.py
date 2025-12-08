@@ -1,49 +1,56 @@
+from typing import Annotated
+
 from fastapi import Depends, HTTPException, status, UploadFile, Form
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from typing import List
 
+
+from .config import settings
 from .database import get_db_session
-from .models.user import BaseUser, Artist, PremiumUser
+from .models.user import BaseUser, Artist, PremiumUser, FreeUser
+from .schemas.token_schema import TokenData
+from .services.user_service import user_service
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 
 
 async def get_current_user(
-    user_id: int, db: AsyncSession = Depends(get_db_session)
-) -> BaseUser:
-    result = await db.execute(select(BaseUser).filter(BaseUser.user_id == user_id))
-    user = result.scalar_one_or_none()
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    return user
-
-
-async def get_current_active_user(
+    token: Annotated[str, Depends(oauth2_scheme)],
     db: AsyncSession = Depends(get_db_session),
 ) -> BaseUser:
-    """
-    Placeholder dependency to get the current authenticated user (any type).
-    For demonstration, this is hardcoded to user_id=1.
-    In a real app, this would be derived from an auth token.
-    """
-    user = await get_current_user(user_id=1, db=db)
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user"
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(
+            token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
         )
+        user_id = str(payload.get("sub"))
+        if user_id is None:
+            raise credentials_exception
+        token_data = TokenData(user_id=int(user_id), role=payload.get("role"))
+    except (JWTError, ValueError):
+        raise credentials_exception
+    if token_data.user_id is None:
+        raise credentials_exception
+    user = await user_service.get_user_by_id(db, user_id=token_data.user_id)
+    if user is None:
+        raise credentials_exception
     return user
 
 
-async def get_current_artist(db: AsyncSession = Depends(get_db_session)) -> Artist:
+async def get_current_artist(
+    current_user: Annotated[BaseUser, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db_session),
+) -> Artist:
     """
-    Returns the ORM object for user_id=3 (The Rockers).
-    This is required for uploading/editing tracks.
+    Returns the ORM object for the current user if they are an artist.
     """
-    result = await db.execute(select(Artist).filter(Artist.user_id == 3))
-    artist = result.scalar_one_or_none()
+    artist = await db.get(Artist, current_user.user_id)
     if not artist:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -53,19 +60,33 @@ async def get_current_artist(db: AsyncSession = Depends(get_db_session)) -> Arti
 
 
 async def get_current_premium_user(
+    current_user: Annotated[BaseUser, Depends(get_current_user)],
     db: AsyncSession = Depends(get_db_session),
 ) -> PremiumUser:
     """
-    Returns the ORM object for user_id=1 (Alice).
-    This is required for streaming and queue interactions.
+    Returns the ORM object for the current user if they are a premium user.
     """
-    result = await db.execute(select(PremiumUser).filter(PremiumUser.user_id == 1))
-    user = result.scalar_one_or_none()
-    if not user:
+    premium_user = await db.get(PremiumUser, current_user.user_id)
+    if not premium_user:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="User is not a premium user"
         )
-    return user
+    return premium_user
+
+
+async def get_current_free_user(
+    current_user: Annotated[BaseUser, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db_session),
+) -> FreeUser:
+    """
+    Returns the ORM object for the current user if they are a free user.
+    """
+    free_user = await db.get(FreeUser, current_user.user_id)
+    if not free_user:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="User is not a free user"
+        )
+    return free_user
 
 
 async def empty_string_to_none(file: UploadFile | None = None) -> UploadFile | None:

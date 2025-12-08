@@ -21,11 +21,12 @@ from src.database import get_db_session
 from src.dependencies import (
     get_current_artist,
     get_current_premium_user,
-    get_current_active_user,
+    get_current_user,
+    get_current_free_user,
     get_genre_ids,
 )
 from src.models.location import Country
-from src.models.user import PremiumUser, Artist, BaseUser
+from src.models.user import PremiumUser, FreeUser, Artist, BaseUser
 from src.models.track import Track
 from src.models.activity import StreamEvent
 from src.models.queue import Queue, QueueItem
@@ -110,7 +111,7 @@ async def log_track_play(
     track_id: int,
     play_log: TrackPlayLog,
     db: AsyncSession = Depends(get_db_session),
-    current_user: PremiumUser = Depends(get_current_premium_user),
+    current_user: FreeUser = Depends(get_current_free_user),
 ):
     """
     Logs a track play event (beacon).
@@ -138,7 +139,7 @@ async def log_track_play(
 async def preview_track_audio(
     track_id: int,
     db: AsyncSession = Depends(get_db_session),
-    current_user: BaseUser = Depends(get_current_active_user),  # Any authenticated user
+    current_user: FreeUser = Depends(get_current_free_user),  # Any authenticated user
 ):
     """
     Provides a secure audio preview (first 1MB) for a track.
@@ -179,7 +180,7 @@ async def preview_track_audio(
 async def get_track_preview_url(
     track_id: int,
     db: AsyncSession = Depends(get_db_session),
-    current_user: BaseUser = Depends(get_current_active_user),  # Any authenticated user
+    current_user: FreeUser = Depends(get_current_free_user),  # Any authenticated user
 ):
     """
     Provides an insecure presigned URL for a track preview,
@@ -198,23 +199,11 @@ async def get_track_preview_url(
     return TrackPreviewUrl(url=HttpUrl(url), preview_duration_seconds=30)
 
 
-@router.get("", response_model=list[TrackSchema])
-async def get_all_tracks(
-    db: AsyncSession = Depends(get_db_session),
-    skip: int = 0,
-    limit: int = 100,
-    current_user: BaseUser = Depends(get_current_active_user),
-):
-    """
-    Returns all tracks.
-    """
-    return await track_service.get_all_tracks(db, current_user, skip, limit)
-
-
 @router.get("/{track_id}", response_model=TrackSchema)
 async def get_track_by_id(
     track_id: int,
     db: AsyncSession = Depends(get_db_session),
+    current_user: BaseUser = Depends(get_current_user),  # Any authenticated user
 ):
     """
     Returns a track by its ID.

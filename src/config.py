@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     MINIO_AUDIO_BUCKET: str = "audio"
     MINIO_COVERS_BUCKET: str = "covers"
 
+    JWT_SECRET_KEY: str = "your-secret-key"
+    JWT_ALGORITHM: str = "HS256"
+
     @computed_field
     @property
     def database_url(self) -> URL:
