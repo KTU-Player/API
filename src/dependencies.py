@@ -49,7 +49,7 @@ async def get_current_user(
     if token_data.user_id is None:
         raise credentials_exception
     user = await user_service.get_user_by_id(db, user_id=token_data.user_id)
-    if user is None:
+    if user is None or not user.is_active:
         raise credentials_exception
     return user
 
@@ -66,10 +66,10 @@ async def get_current_artist(
             status_code=status.HTTP_403_FORBIDDEN, detail="User is not an artist"
         )
     artist = await db.get(Artist, token_data.user_id)
-    if not artist:
+    if not artist or not artist.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="User is not an artist",
+            detail="Artist not found or is inactive",
         )
     return artist
 
@@ -86,9 +86,10 @@ async def get_current_premium_user(
             status_code=status.HTTP_403_FORBIDDEN, detail="User is not a premium user"
         )
     premium_user = await db.get(PremiumUser, token_data.user_id)
-    if not premium_user:
+    if not premium_user or not premium_user.is_active:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="User is not a premium user"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Premium user not found or is inactive",
         )
     return premium_user
 
@@ -105,9 +106,10 @@ async def get_current_free_user(
             status_code=status.HTTP_403_FORBIDDEN, detail="User is not a free user"
         )
     free_user = await db.get(FreeUser, token_data.user_id)
-    if not free_user:
+    if not free_user or not free_user.is_active:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="User is not a free user"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User not found or is inactive",
         )
     return free_user
 
