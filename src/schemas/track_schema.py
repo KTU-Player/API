@@ -18,14 +18,14 @@ class TrackBase(BaseModel):
 
 
 class TrackCreate(TrackBase):
-    genre_ids: list[int] = []
+    # genre_ids: list[int] = []
     pass
 
 
 class TrackUpdate(TrackBase):
     title: str | None = None
     is_explicit: bool | None = None
-    genre_ids: list[int] | None = []
+    # genre_ids: list[int] | None = []
 
 
 class Track(TrackBase):

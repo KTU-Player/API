@@ -8,7 +8,6 @@ from fastapi import (
     HTTPException,
     UploadFile,
     File,
-    Form,
     status,
     Request,
     Response,
@@ -282,27 +281,18 @@ async def get_track_by_id(
 async def update_track(
     track_id: int,
     track_in: TrackUpdate = Depends(),
-    genre_ids: str | None = Form(None),
+    genre_ids: list[int] | None = Depends(get_genre_ids),
     cover_file: UploadFile | None = None,
     db: AsyncSession = Depends(get_db_session),
     current_artist: Artist = Depends(get_current_artist),
 ):
-    if genre_ids is not None:
-        try:
-            track_in.genre_ids = [int(gid.strip()) for gid in genre_ids.split(",")]
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Invalid genre_ids format. Expected a comma-separated list of integers.",
-            )
-
-    if track_in.genre_ids is not None and not track_in.genre_ids:
+    if genre_ids is not None and not genre_ids:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="At least one genre must be selected.",
         )
     updated_track = await track_service.update_track(
-        db, track_id, track_in, current_artist.user_id, cover_file
+        db, track_id, track_in, current_artist.user_id, cover_file, genre_ids
     )
     if not updated_track:
         raise HTTPException(status_code=404, detail="Track not found")
