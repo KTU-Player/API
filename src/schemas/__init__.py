@@ -10,7 +10,13 @@ from .user_schema import (
     PremiumUserInDB,
 )
 from .track_schema import Track, TrackCreate, TrackUpdate, GenreForTrack
-from .subscription_schema import Subscription, SubscriptionCreate, SubscriptionPlan
+from .subscription_schema import (
+    Subscription,
+    SubscriptionCreate,
+    SubscriptionUpgrade,
+    SubscriptionPlan,
+    CardDetails,
+)
 from .payment_schema import PaymentMethod, PaymentMethodCreate, Transaction
 from .activity_schema import SearchEvent, StreamEvent
 from .queue_schema import Queue, QueueItem
@@ -34,7 +40,9 @@ __all__ = [
     "GenreForTrack",
     "Subscription",
     "SubscriptionCreate",
+    "SubscriptionUpgrade",
     "SubscriptionPlan",
+    "CardDetails",
     "PaymentMethod",
     "PaymentMethodCreate",
     "Transaction",

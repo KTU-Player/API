@@ -1,5 +1,12 @@
 from datetime import date
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class CardDetails(BaseModel):
+    card_number: str = Field(..., max_length=16)
+    card_holder_name: str = Field(..., max_length=255)
+    expiration_date: str = Field(..., max_length=5)  # MM/YY
+    cvc: str = Field(..., max_length=4)
 
 
 class SubscriptionPlan(BaseModel):
@@ -37,3 +44,8 @@ class Subscription(SubscriptionBase):
     end_date: date
     plan: SubscriptionPlan
     status: SubscriptionStatus
+
+
+class SubscriptionUpgrade(BaseModel):
+    subscription_plan_id: int
+    card_details: CardDetails
