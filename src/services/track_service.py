@@ -35,6 +35,21 @@ class TrackService:
         result = await db.execute(stmt)
         return list(result.scalars().all())
 
+    async def get_all_tracks_by_artist(
+        self, db: AsyncSession, artist_id: int, skip: int = 0, limit: int = 100
+    ) -> list[models.Track]:
+        stmt = (
+            select(models.Track)
+            .where(models.Track.artist_id == artist_id, models.Track.is_active.is_(True))
+            .offset(skip)
+            .limit(limit)
+            .options(
+                selectinload(models.Track.artist), selectinload(models.Track.genres)
+            )
+        )
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
+
     async def create_track(
         self,
         db: AsyncSession,

@@ -89,6 +89,22 @@ async def create_track(
     return result.scalar_one()
 
 
+@router.get("/my-tracks", response_model=list[TrackSchema])
+async def get_my_tracks(
+    db: AsyncSession = Depends(get_db_session),
+    current_artist: Artist = Depends(get_current_artist),
+    skip: int = 0,
+    limit: int = 100,
+):
+    """
+    Returns all tracks for the current artist.
+    """
+    tracks = await track_service.get_all_tracks_by_artist(
+        db, artist_id=current_artist.user_id, skip=skip, limit=limit
+    )
+    return tracks
+
+
 @router.post("/{track_id}/log-play", status_code=status.HTTP_204_NO_CONTENT)
 async def log_track_play(
     track_id: int,
