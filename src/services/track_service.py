@@ -1,3 +1,4 @@
+from datetime import date
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -21,17 +22,37 @@ class TrackService:
         return await db.scalar(stmt)
 
     async def get_all_tracks(
-        self, db: AsyncSession, skip: int = 0, limit: int = 100
+        self,
+        db: AsyncSession,
+        current_user: models.BaseUser | None,
+        skip: int = 0,
+        limit: int = 100,
     ) -> list[models.Track]:
         stmt = (
             select(models.Track)
             .where(models.Track.is_active.is_(True))
-            .offset(skip)
-            .limit(limit)
             .options(
                 selectinload(models.Track.artist), selectinload(models.Track.genres)
             )
         )
+
+        if current_user and current_user.date_of_birth:
+            today = date.today()
+            age = (
+                today.year
+                - current_user.date_of_birth.year
+                - (
+                    (today.month, today.day)
+                    < (
+                        current_user.date_of_birth.month,
+                        current_user.date_of_birth.day,
+                    )
+                )
+            )
+            if age < 18:
+                stmt = stmt.where(models.Track.is_explicit.is_(False))
+
+        stmt = stmt.offset(skip).limit(limit)
         result = await db.execute(stmt)
         return list(result.scalars().all())
 
@@ -99,9 +120,7 @@ class TrackService:
         result = await db.execute(
             select(models.Track)
             .options(selectinload(models.Track.genres))
-            .filter(
-                models.Track.track_id == track_id, models.Track.is_active.is_(True)
-            )
+            .filter(models.Track.track_id == track_id, models.Track.is_active.is_(True))
         )
         track = result.scalar_one_or_none()
 

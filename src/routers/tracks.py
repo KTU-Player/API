@@ -203,11 +203,12 @@ async def get_all_tracks(
     db: AsyncSession = Depends(get_db_session),
     skip: int = 0,
     limit: int = 100,
+    current_user: BaseUser = Depends(get_current_active_user),
 ):
     """
     Returns all tracks.
     """
-    return await track_service.get_all_tracks(db, skip, limit)
+    return await track_service.get_all_tracks(db, current_user, skip, limit)
 
 
 @router.get("/{track_id}", response_model=TrackSchema)
