@@ -6,9 +6,14 @@ from httpx import AsyncClient
 from fastapi import status
 
 from src.main import app
-from src.dependencies import get_current_artist, get_current_premium_user, get_current_active_user
+from src.dependencies import get_current_artist, get_current_premium_user, get_current_active_user, get_current_free_user
 from src.models.user import Artist, FreeUser, BaseUser
+from src.models.track import Track
+from src.models.queue import Queue, QueueItem
 from src.database import AsyncSessionFactory
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 
 # Sample users to be returned by dependency overrides
 test_artist_user = Artist(
@@ -165,14 +170,124 @@ async def test_create_track_with_no_genres_fails(client: AsyncClient):
 async def test_update_track_with_no_genres_fails(client: AsyncClient):
     app.dependency_overrides[get_current_artist] = override_get_current_artist
 
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    app.dependency_overrides = {}
+
+
+@pytest.mark.asyncio
+async def test_update_track_as_artist_success(client: AsyncClient, monkeypatch):
+    app.dependency_overrides[get_current_artist] = override_get_current_artist
+
+    # Create a track to update
+    async with AsyncSessionFactory() as session:
+        track_to_update = await _create_test_track(session, test_artist_user.user_id)
+
+    # Mock storage service for cover upload if needed, though not sending one here
+    monkeypatch.setattr(
+        "src.services.storage_service.storage_service.upload_file",
+        lambda file, bucket: f"http://fake-storage.com/{bucket}/{file.filename}",
+    )
+
+    updated_title = "Updated Title"
+    updated_is_explicit = "true"
+
     response = await client.put(
-        "/tracks/1",
+        f"/tracks/{track_to_update.track_id}",
         data={
-            "genre_ids": [],
+            "title": updated_title,
+            "is_explicit": updated_is_explicit,
         },
     )
 
-    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["title"] == updated_title
+    assert data["is_explicit"] is True
+
+    app.dependency_overrides = {}
+
+
+@pytest.mark.asyncio
+async def test_delete_track_as_artist_success(client: AsyncClient, monkeypatch):
+    app.dependency_overrides[get_current_artist] = override_get_current_artist
+
+    # Create a track to delete
+    async with AsyncSessionFactory() as session:
+        track_to_delete = await _create_test_track(session, test_artist_user.user_id)
+
+    # Mock storage service for deletion
+    monkeypatch.setattr(
+        "src.services.storage_service.storage_service.delete_file",
+        lambda key, bucket: None,
+    )
+
+    response = await client.delete(f"/tracks/{track_to_delete.track_id}")
+
+    assert response.status_code == status.HTTP_204_NO_CONTENT
+
+    # Verify track is inactive
+    async with AsyncSessionFactory() as session:
+        db_track = await session.get(Track, track_to_delete.track_id)
+        assert db_track.is_active is False
+
+    app.dependency_overrides = {}
+
+
+@pytest.mark.asyncio
+async def test_preview_track_as_free_user(client: AsyncClient, monkeypatch):
+    app.dependency_overrides[get_current_free_user] = override_get_current_active_user
+
+    async with AsyncSessionFactory() as session:
+        track_to_preview = await _create_test_track(session, test_artist_user.user_id)
+
+    # Mock storage service
+    monkeypatch.setattr(
+        "src.services.storage_service.storage_service.client.stat_object",
+        lambda bucket, obj: type("obj", (object,), {"size": 2 * 1024 * 1024})(),  # 2MB file
+    )
+    monkeypatch.setattr(
+        "src.services.storage_service.storage_service.client.get_object",
+        lambda bucket, obj, length: BytesIO(b"preview_data"),
+    )
+
+    response = await client.get(f"/tracks/{track_to_preview.track_id}/preview-audio")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.headers["content-type"] == "audio/mpeg"
+    assert response.headers["content-length"] == str(1024 * 1024)  # 1MB preview
+    assert response.content == b"preview_data"
+
+    app.dependency_overrides = {}
+
+
+@pytest.mark.asyncio
+async def test_get_recommendations_as_premium_user(client: AsyncClient):
+    app.dependency_overrides[get_current_premium_user] = override_get_current_premium_user
+
+    async with AsyncSessionFactory() as session:
+        # Create some tracks
+        seed_track = await _create_test_track(session, test_artist_user.user_id)
+        await _create_test_track(session, test_artist_user.user_id)
+        await _create_test_track(session, test_artist_user.user_id)
+        await _create_test_track(session, test_artist_user.user_id)
+
+    response = await client.post(f"/tracks/{seed_track.track_id}/recommendations")
+
+    assert response.status_code == status.HTTP_200_OK
+    recommendations = response.json()
+    assert len(recommendations) == 3
+
+    # Verify that the recommendations were added to the queue
+    async with AsyncSessionFactory() as session:
+        user_queue = await session.scalar(
+            select(Queue).where(Queue.user_id == test_premium_user.user_id)
+        )
+        assert user_queue is not None
+        queue_items = await session.execute(
+            select(QueueItem).where(QueueItem.queue_id == user_queue.queue_id)
+        )
+        assert len(queue_items.scalars().all()) == 3
+
     app.dependency_overrides = {}
 
 

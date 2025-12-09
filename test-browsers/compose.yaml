@@ -1,0 +1,15 @@
+services:
+  chrome:
+    image: selenium/standalone-chrome:136.0-20251101
+    ports:
+      - 4444:4444
+      - 7900:7900
+    restart: unless-stopped
+    shm_size: 2g
+  firefox:
+    image: selenium/standalone-firefox:144.0-20251101
+    ports:
+      - 4445:4444
+      - 7901:7900
+    restart: unless-stopped
+    shm_size: 2g
